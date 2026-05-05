@@ -1,6 +1,6 @@
 const userModel = require("../models/user.model");
 const foodPartnerModel = require("../models/foodpartner.model");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 // User Registration, Login, and Logout Controllers
@@ -51,7 +51,7 @@ async function loginUser(req, res) {
 
   if (!user) {
     return res.status(400).json({
-      message: "Invelid email or password",
+      message: "Invalid email or password",
     });
   }
 
@@ -89,10 +89,9 @@ function LogoutUser(req, res) {
   });
 }
 
-
 // Food Partner Registration, Login, and Logout Controllers
 async function registerFoodPartner(req, res) {
-  const { name, email, password } = req.body;
+  const { name, email, password, phone, address, contactName } = req.body;
 
   const isFoodPartnerAlreadyExists = await foodPartnerModel.findOne({
     email,
@@ -110,6 +109,9 @@ async function registerFoodPartner(req, res) {
     name,
     email,
     password: hashedPassword,
+    phone,
+    address,
+    contactName,
   });
 
   const token = jwt.sign(
@@ -125,6 +127,9 @@ async function registerFoodPartner(req, res) {
       _id: foodPartner._id,
       email: foodPartner.email,
       name: foodPartner.name,
+      address: foodPartner.address,
+      contactName: foodPartner.contactName,
+      phone: foodPartner.phone,
     },
   });
 }

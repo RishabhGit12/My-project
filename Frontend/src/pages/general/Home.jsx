@@ -9,20 +9,18 @@ const Home = () => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        // Function to check if the authentication token cookie exists
-        const checkAuthToken = () => {
-            const cookies = document.cookie.split(';');
-            const hasToken = cookies.some(cookie => cookie.trim().startsWith('token='));
-            setIsLoggedIn(hasToken);
-        };
+    // Helper function to scan browser cookies for an active session token
+    const checkAuthToken = () => {
+        const cookies = document.cookie.split(';');
+        return cookies.some(cookie => cookie.trim().startsWith('token='));
+    };
 
-        checkAuthToken();
+    useEffect(() => {
+        setIsLoggedIn(checkAuthToken());
 
         // Fetch feed items
         axios.get(`${import.meta.env.VITE_API_URL}/api/food`, { withCredentials: true })
             .then(response => {
-                console.log(response.data);
                 setVideos(response.data.foodItems || []);
             })
             .catch((err) => { 
@@ -30,7 +28,18 @@ const Home = () => {
             });
     }, []);
 
+    // Intercepts actions if no session token is present
+    const handleUnauthenticatedAction = () => {
+        alert("Please Login/Signup First!");
+        navigate('/user/login');
+    };
+
     async function likeVideo(item) {
+        if (!checkAuthToken()) {
+            handleUnauthenticatedAction();
+            return;
+        }
+
         try {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/food/like`, { foodId: item._id }, { withCredentials: true });
             if (response.data.like) {
@@ -39,11 +48,16 @@ const Home = () => {
                 setVideos((prev) => prev.map((v) => v._id === item._id ? { ...v, likeCount: v.likeCount - 1 } : v));
             }
         } catch (err) {
-            if (err.response?.status === 401) navigate('/user/login');
+            if (err.response?.status === 401) handleUnauthenticatedAction();
         }
     }
 
     async function saveVideo(item) {
+        if (!checkAuthToken()) {
+            handleUnauthenticatedAction();
+            return;
+        }
+
         try {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/food/save`, { foodId: item._id }, { withCredentials: true });
             if (response.data.save) {
@@ -52,9 +66,24 @@ const Home = () => {
                 setVideos((prev) => prev.map((v) => v._id === item._id ? { ...v, savesCount: v.savesCount - 1 } : v));
             }
         } catch (err) {
-            if (err.response?.status === 401) navigate('/user/login');
+            if (err.response?.status === 401) handleUnauthenticatedAction();
         }
     }
+
+    // New clear cookie and logout utility handler
+    const handleLogout = async () => {
+        try {
+            // Fires an explicit call to clear backend cookie context
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {}, { withCredentials: true });
+        } catch (err) {
+            console.error("Backend logout cleanup error:", err);
+        }
+
+        // Wipe client-side cookies manually to guarantee state updates instantly
+        document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+        setIsLoggedIn(false);
+        navigate('/');
+    };
 
     return (
         <div className="home-page-container" style={{ position: 'relative', width: '100%', minHeight: '100vh', background: '#000' }}>
@@ -73,7 +102,7 @@ const Home = () => {
                 background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)',
                 boxSizing: 'border-box'
             }}>
-                {/* Brand Logo/Text */}
+                {/* Brand Logo */}
                 <h2 style={{ 
                     margin: 0, 
                     color: '#fff', 
@@ -85,47 +114,32 @@ const Home = () => {
                     Food<span style={{ color: '#ff3f6c' }}>Flix</span>
                 </h2>
 
-                {/* Conditional Auth Button Profile Group */}
-                {!isLoggedIn ? (
-                    <button 
-                        onClick={() => navigate('/user/login')}
-                        style={{
-                            padding: '10px 22px',
-                            background: '#ff3f6c', 
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '25px', 
-                            fontSize: '0.9rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            boxShadow: '0px 4px 15px rgba(255, 63, 108, 0.4)',
-                            letterSpacing: '0.3px'
-                        }}
-                        onMouseEnter={(e) => e.target.style.transform = 'scale(1.04)'}
-                        onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-                    >
-                        Sign In
-                    </button>
-                ) : (
-                    <div style={{
-                        padding: '6px 14px',
-                        background: 'rgba(255, 255, 255, 0.15)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        borderRadius: '20px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                {/* Dynamic Auth Button */}
+                <button 
+                    onClick={isLoggedIn ? handleLogout : () => navigate('/user/login')}
+                    style={{
+                        padding: '10px 22px',
+                        background: isLoggedIn ? 'rgba(255, 255, 255, 0.15)' : '#ff3f6c', 
                         color: '#fff',
-                        fontSize: '0.85rem',
-                        fontWeight: '500',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-                    }}>
-                        🟢 Live Feed
-                    </div>
-                )}
+                        border: isLoggedIn ? '1px solid rgba(255, 255, 255, 0.2)' : 'none',
+                        borderRadius: '25px', 
+                        fontSize: '0.9rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        backdropFilter: isLoggedIn ? 'blur(10px)' : 'none',
+                        WebkitBackdropFilter: isLoggedIn ? 'blur(10px)' : 'none',
+                        transition: 'all 0.2s ease',
+                        boxShadow: isLoggedIn ? '0 4px 12px rgba(0,0,0,0.2)' : '0px 4px 15px rgba(255, 63, 108, 0.4)',
+                        letterSpacing: '0.3px'
+                    }}
+                    onMouseEnter={(e) => e.target.style.transform = 'scale(1.04)'}
+                    onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                >
+                    {isLoggedIn ? 'Sign Out' : 'Sign In'}
+                </button>
             </div>
 
-            {/* Existing Reels Feed Component */}
+            {/* Reels Feed Component */}
             <ReelFeed
                 items={videos}
                 onLike={likeVideo}
